@@ -5,6 +5,19 @@ from datetime import datetime, timedelta
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 import openai
+import yaml
+import os
+
+# Debug: inspect your config file
+config_path = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
+try:
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    st.sidebar.write("🔍 Loaded google-ads.yaml keys:", list(cfg.keys()))
+    st.sidebar.write("🔍 Sample values:", {k: (v if k!="refresh_token" else "…")} for k,v in cfg.items())
+except Exception as e:
+    st.sidebar.error(f"Failed to read {config_path}: {e}")
+    st.stop()
 
 # Load credentials from environment or default YAML
 GOOGLE_ADS_CONFIG_PATH = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
