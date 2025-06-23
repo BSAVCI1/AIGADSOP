@@ -1,8 +1,8 @@
 # google-ads.yaml
 
 
-developer_token: "WjzvLQb-RsU0SmmyL4bW3g"
-client_id:       "311432477352-bsmrafhdmem7iebb2agkflsejpi205im.apps.googleusercontent.com"
-client_secret:   "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"
-refresh_token:   "1//04wfMt9_11GT4CgYIARAAGAQSNwF-L9IrNeTqtAQpu8V4ukOTlj75HXHt1UsxCBuvP0NAY1R_XORod4ijq9C8Adpm1T3tQ1drYjU"
-login_customer_id: "9109406231"
+developer_token: WjzvLQb-RsU0SmmyL4bW3g
+client_id:       311432477352-bsmrafhdmem7iebb2agkflsejpi205im.apps.googleusercontent.com
+client_secret:   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
+refresh_token:   1//04wfMt9_11GT4CgYIARAAGAQSNwF-L9IrNeTqtAQpu8V4ukOTlj75HXHt1UsxCBuvP0NAY1R_XORod4ijq9C8Adpm1T3tQ1drYjU
+login_customer_id: 9109406231
