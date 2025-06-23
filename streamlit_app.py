@@ -6,7 +6,6 @@ from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 import openai
 import yaml
-import os
 
 # Debug: inspect your config file
 config_path = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
@@ -14,7 +13,8 @@ try:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
     st.sidebar.write("🔍 Loaded google-ads.yaml keys:", list(cfg.keys()))
-    st.sidebar.write("🔍 Sample values:", {k: (v if k!="refresh_token" else "…")} for k,v in cfg.items())
+    sample_values = {k: ("…" if k == "refresh_token" else v) for k, v in cfg.items()}
+    st.sidebar.write("🔍 Sample values:", sample_values)
 except Exception as e:
     st.sidebar.error(f"Failed to read {config_path}: {e}")
     st.stop()
@@ -143,19 +143,15 @@ if st.button("Fetch & Analyze"):
         openai = init_openai()
         cid = customer_id.replace('-', '')
         try:
-            # Historical performance
             perf_df = fetch_performance_data(client, cid, start_date, end_date)
             st.subheader("Campaign Performance History")
             st.dataframe(perf_df)
 
-            # Correlate manual conversion event
             st.subheader(f"Search Terms on {conv_date} at {conv_location}")
             search_df = fetch_search_terms(client, cid, conv_date.isoformat())
-            # Identify top terms by clicks
             top_kw = search_df.sort_values('clicks', ascending=False).head(10)
             st.dataframe(top_kw)
 
-            # AI-driven recommendations
             st.subheader("Optimization Opportunities")
             recs = generate_recommendations(perf_df)
             st.markdown(recs)
