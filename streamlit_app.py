@@ -1,9 +1,3 @@
-# AI Google Ads Optimizer Streamlit App
-# ====================================
-# This Streamlit application connects to the Google Ads API to fetch campaign performance
-# data, uses OpenAI's language model to generate optimization recommendations,
-# and displays actionable insights.
-
 import os
 import streamlit as st
 import pandas as pd
@@ -12,7 +6,7 @@ from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 import openai
 
-# Load credentials from environment
+# Load credentials from environment or default YAML
 GOOGLE_ADS_CONFIG_PATH = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -26,7 +20,7 @@ def init_openai():
     openai.api_key = OPENAI_API_KEY
     return openai
 
-
+# Fetch basic campaign performance
 def fetch_performance_data(client, customer_id: str, start_date: str, end_date: str) -> pd.DataFrame:
     query = f"""
         SELECT
@@ -46,26 +40,51 @@ def fetch_performance_data(client, customer_id: str, start_date: str, end_date: 
     records = []
     for batch in response:
         for row in batch.results:
-            metrics = row.metrics
-n            records.append({
+            m = row.metrics
+            records.append({
                 "campaign_id": row.campaign.id,
                 "campaign_name": row.campaign.name,
-                "impressions": metrics.impressions,
-                "clicks": metrics.clicks,
-                "cost": metrics.cost_micros / 1e6,
-                "conversions": metrics.conversions,
-                "ctr": metrics.ctr,
+                "date": row.segments.date,
+                "impressions": m.impressions,
+                "clicks": m.clicks,
+                "cost": m.cost_micros / 1e6,
+                "conversions": m.conversions,
+                "ctr": m.ctr,
             })
     return pd.DataFrame(records)
 
+# Fetch search term performance
+def fetch_search_terms(client, customer_id: str, date: str) -> pd.DataFrame:
+    query = f"""
+        SELECT
+          segments.search_term,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros
+        FROM search_term_view
+        WHERE segments.date = '{date}'
+    """
+    service = client.get_service("GoogleAdsService")
+    response = service.search_stream(customer_id=customer_id, query=query)
 
+    records = []
+    for batch in response:
+        for row in batch.results:
+            m = row.metrics
+            records.append({
+                "search_term": row.segments.search_term,
+                "impressions": m.impressions,
+                "clicks": m.clicks,
+                "cost": m.cost_micros / 1e6,
+            })
+    return pd.DataFrame(records)
+
+# Generate AI recommendations
 def generate_recommendations(df: pd.DataFrame) -> str:
-    # Summarize key metrics
     summary = df.describe().to_string()
     prompt = (
-        "You are an experienced Google Ads consultant. Based on the following campaign performance metrics, "
-        "provide actionable optimization recommendations. Include suggestions about bids, budgets, keywords, "
-        "and ad copy improvements. \n\nMetrics Summary:\n" + summary
+        "You are an expert Google Ads consultant. Based on these metrics, "
+        "provide optimization opportunities around bids, budgets, keywords, ad copy, and schedule.\n\n" + summary
     )
     resp = openai.ChatCompletion.create(
         model="gpt-4o-mini",
@@ -75,49 +94,58 @@ def generate_recommendations(df: pd.DataFrame) -> str:
     )
     return resp.choices[0].message.content.strip()
 
-
+# Date helpers
 def format_date_range(days_back: int):
-    end = datetime.today().date()
-    start = end - timedelta(days=days_back)
-    return start.isoformat(), end.isoformat()
-
+    today = datetime.today().date()
+    start = today - timedelta(days=days_back)
+    return start.isoformat(), today.isoformat()
 
 # Streamlit UI
 st.set_page_config(page_title="AI Google Ads Optimizer", layout="wide")
 st.title("🚀 AI Google Ads Optimizer")
 
-client = init_google_ads_client()
-openai = init_openai()
-
+# Sidebar inputs
 with st.sidebar:
     st.header("Settings")
     customer_id = st.text_input("Google Ads Customer ID", help="e.g., 123-456-7890")
-    days_back = st.slider("Date Range (days)", min_value=7, max_value=90, value=30, step=7)
+    days_back = st.slider("History (days)", 7, 90, 30, 7)
+    st.markdown("---")
+    st.subheader("Manual Conversion Event")
+    conv_date = st.date_input("Conversion Date")
+    conv_time = st.time_input("Conversion Time")
+    conv_location = st.text_input("Conversion Location")
+    st.markdown("---")
     if not OPENAI_API_KEY:
-        st.error("Please set OPENAI_API_KEY environment variable.")
+        st.error("Set OPENAI_API_KEY in your environment.")
     if not os.path.exists(GOOGLE_ADS_CONFIG_PATH):
-        st.error("Google Ads config not found at: {}".format(GOOGLE_ADS_CONFIG_PATH))
+        st.error(f"Missing Google Ads config at {GOOGLE_ADS_CONFIG_PATH}")
 
 start_date, end_date = format_date_range(days_back)
 
-if st.button("Fetch & Optimize"):
+if st.button("Fetch & Analyze"):
     if not customer_id:
-        st.warning("Enter a Google Ads Customer ID to proceed.")
+        st.warning("Enter a Google Ads Customer ID.")
     else:
-        with st.spinner("Fetching performance data..."):
-            try:
-                df = fetch_performance_data(client, customer_id.replace('-', ''), start_date, end_date)
-                st.success("Fetched data for {} campaigns".format(len(df)))
-                st.dataframe(df)
+        client = init_google_ads_client()
+        openai = init_openai()
+        cid = customer_id.replace('-', '')
+        try:
+            # Historical performance
+            perf_df = fetch_performance_data(client, cid, start_date, end_date)
+            st.subheader("Campaign Performance History")
+            st.dataframe(perf_df)
 
-                st.subheader("AI-Generated Recommendations")
-                with st.spinner("Generating recommendations..."):
-                    recs = generate_recommendations(df)
-                st.markdown(recs)
+            # Correlate manual conversion event
+            st.subheader(f"Search Terms on {conv_date} at {conv_location}")
+            search_df = fetch_search_terms(client, cid, conv_date.isoformat())
+            # Identify top terms by clicks
+            top_kw = search_df.sort_values('clicks', ascending=False).head(10)
+            st.dataframe(top_kw)
 
-            except GoogleAdsException as ex:
-                st.error(f"Google Ads API Error: {ex.error.message}")
+            # AI-driven recommendations
+            st.subheader("Optimization Opportunities")
+            recs = generate_recommendations(perf_df)
+            st.markdown(recs)
 
-# Deployment instructions
-st.sidebar.markdown("---")
-st.sidebar.markdown(
+        except GoogleAdsException as ex:
+            st.error(f"API Error: {ex.error.message}")
